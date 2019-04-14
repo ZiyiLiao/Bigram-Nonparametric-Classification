@@ -1,0 +1,60 @@
+---
+title: 'Analyzing bbcnews text'
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    number_sections: true
+    code_folding: hide
+---
+Authors:
+Ziyi, Jay, Yifei, Lin, Jiameng
+
+```{r}
+file_name_busi <- list.files("../data/bbc/business")
+stringsplit <-function(line){
+  return(strsplit(line, " ")[[1]])
+}
+ground_truth_list <- list()
+for (i in c(1:length(file_name_busi))){
+  current_file_name <- file_name_busi[i]
+  ## read the ground truth text
+  current_ground_truth_txt <- readLines(paste("../data/bbc/business/",current_file_name,sep=""), warn=FALSE)
+  current_ground_truth_list_vec <- lapply(current_ground_truth_txt, stringsplit)
+  ground_truth_list[[i]] <- unlist(current_ground_truth_list_vec)
+}
+busi_lexicon<- unlist(ground_truth_list)
+
+```
+
+```{r}
+read_txt <- function(file_name){
+  current_file_name <- sub(".txt","",file_name)
+  current_ground_truth <- readLines(paste("../data/bbc/business/",current_file_name,".txt",sep=""), encoding="UTF-8",warn=FALSE)
+  return(current_ground_truth)
+}
+
+bigr_lib <- lapply(file_name_busi, read_txt)
+
+```
+```{r}
+corpus<-VCorpus(VectorSource(bigr_lib))%>%
+    tm_map(content_transformer(tolower))%>%
+    tm_map(removePunctuation)%>%
+    tm_map(removeNumbers)%>%
+    tm_map(removeWords, character(0))%>%
+    tm_map(stripWhitespace)
+dict <- tidy(corpus) %>%
+  select(text)  
+data("stop_words")
+completed <- dict %>%
+  mutate(id = file_name_busi)  %>%
+  unnest_tokens(dictionary, text) %>%
+  anti_join(stop_words,by = c("dictionary" = "word")) 
+list <- completed$dictionary
+
+```
+
