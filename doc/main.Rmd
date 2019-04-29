@@ -1,5 +1,6 @@
 ---
 title: 'Analyzing bbcnews text'
+Author: Ziyi
 output: 
   html_document:
     toc: true
@@ -10,51 +11,142 @@ output:
     number_sections: true
     code_folding: hide
 ---
-Authors:
-Ziyi, Jay, Yifei, Lin, Jiameng
 
-```{r}
-file_name_busi <- list.files("../data/bbc/business")
-stringsplit <-function(line){
-  return(strsplit(line, " ")[[1]])
-}
-ground_truth_list <- list()
-for (i in c(1:length(file_name_busi))){
-  current_file_name <- file_name_busi[i]
-  ## read the ground truth text
-  current_ground_truth_txt <- readLines(paste("../data/bbc/business/",current_file_name,sep=""), warn=FALSE)
-  current_ground_truth_list_vec <- lapply(current_ground_truth_txt, stringsplit)
-  ground_truth_list[[i]] <- unlist(current_ground_truth_list_vec)
-}
-busi_lexicon<- unlist(ground_truth_list)
+### Step 0: Data Cleaning
+*create the corpus*
+```{r set up}
+# load the packages
+library(tm)
+library(dplyr)
+library(tidytext)
 
+busi_location <- "../data/bbc/business/"
+entertain_location <- "../data/bbc/entertainment/"
+politics_location <- "../data/bbc/politics/"
+sport_location <- "../data/bbc/sport/"
+tech_location <- "../data/bbc/tech/"
 ```
 
-```{r}
-read_txt <- function(file_name){
+```{r read_text}
+read_txt <- function(file_name, file_loca){
   current_file_name <- sub(".txt","",file_name)
-  current_ground_truth <- readLines(paste("../data/bbc/business/",current_file_name,".txt",sep=""), encoding="UTF-8",warn=FALSE)
+  current_ground_truth <- readLines(paste(file_loca,current_file_name,".txt",sep=""), encoding="UTF-8",warn=FALSE)
   return(current_ground_truth)
 }
 
-bigr_lib <- lapply(file_name_busi, read_txt)
-
+busi_bigr_lib <- busi_location %>% list.files() %>% lapply(., read_txt,busi_location)
+entertain_bigr_lib <- entertain_location %>% list.files() %>% lapply(., read_txt,entertain_location)
+politics_bigr_lib <- politics_location %>%list.files() %>% lapply(., read_txt,politics_location)
+sport_bigr_lib <- sport_location %>% list.files() %>% lapply(., read_txt, sport_location)
+tech_bigr_lib <- tech_location %>% list.files() %>% lapply(., read_txt, tech_location)
 ```
+
+```{r stop words}
+data("stop_words")
+word <- c("bn","ago","yesterday","lot","today","months","month",
+                 "happier","happiest","last","week","past")
+#add words in the stop_words and the level of lexicon is 'updated
+stop_words <- stop_words %>% bind_rows(mutate(tibble(word), lexicon = "updated")) 
+```
+
 ```{r}
-corpus<-VCorpus(VectorSource(bigr_lib))%>%
+dictionary <- function(bigr_lib, path){
+  corpus<- VCorpus(VectorSource(bigr_lib))%>%
     tm_map(content_transformer(tolower))%>%
     tm_map(removePunctuation)%>%
     tm_map(removeNumbers)%>%
     tm_map(removeWords, character(0))%>%
     tm_map(stripWhitespace)
-dict <- tidy(corpus) %>%
-  select(text)  
-data("stop_words")
-completed <- dict %>%
-  mutate(id = file_name_busi)  %>%
-  unnest_tokens(dictionary, text) %>%
-  anti_join(stop_words,by = c("dictionary" = "word")) 
-list <- completed$dictionary
+
+  dict <- tidy(corpus) %>% select(text)  
+  completed <- dict %>%
+    mutate(id = list.files(path))  %>%
+    unnest_tokens(dictionary, text) %>%
+    anti_join(stop_words,by = c("dictionary" = "word")) 
+
+  list <- completed$dictionary
+  return(list)
+}
+
+
+busi_corpus <- dictionary(busi_bigr_lib, busi_location)# length 77410
+entertain_corpus <- dictionary(entertain_bigr_lib, entertain_location) # 58609
+politics_corpus <- dictionary(politics_bigr_lib, politics_location) #80768
+sport_corpus <- dictionary(sport_bigr_lib, sport_location) #71687
+tech_corpus <- dictionary(tech_bigr_lib, tech_location) #87410
+```
+
+### Step 1: Bi-letter
+```{r biletter functions}
+biletter <- function(token){
+  ## Split into characterss:
+  w <- strsplit(token, "")[[1]]
+  ## Word tri-grams pasted together:
+  return(vapply(ngrams(w, 2L), paste, "", collapse = ""))
+}
+
+
+biletter_list <- function(corpus){
+  letter <- list()
+  for(i in 1:length(corpus)){
+    letter[[i]]<- corpus[i] %>% as.character() %>% biletter()
+    }
+  letter <- unlist(letter)
+  return(letter)
+}
+
+
+into_dataframe <- function(list){
+  df <- list %>% as.character() %>% strsplit(.,"") %>% unlist() %>% matrix(.,ncol = 2, byrow = T) %>% data.frame()
+  df$biletter <- list
+  return(df)
+}
+```
+```{r biletter}
+busi_biletter <- busi_corpus %>% biletter_list() %>% into_dataframe() # 445952 3
+politics_biletter <- politics_corpus %>% biletter_list() %>% into_dataframe() #466856 3
+entertain_biletter <- entertain_corpus %>% biletter_list() %>% into_dataframe() #314031 3
+tech_biletter <- tech_corpus %>% biletter_list() %>% into_dataframe() # 498800 3
+sport_biletter <- sport_corpus %>% biletter_list() %>% into_dataframe() #386531 3
+```
+```{r biletter csv}
+
+write.csv(busi_biletter, file = "../output/busi_biletter.csv")
+write.csv(politics_biletter, file = "../output/politics_biletter.csv")
+write.csv(entertain_biletter, file = "../output/entertain_biletter.csv")
+write.csv(tech_biletter, file = "../output/tech_biletter.csv")
+write.csv(sport_biletter, file = "../output/sport_biletter.csv")
 
 ```
+
+### Step 2: Bigram
+```{r bigram functions}
+bigram <- function(token){
+  return(vapply(ngrams(token,2L), paste,"", collapse = " "))
+}
+
+bigram_df <- function(corpus){
+  bigr <- corpus %>% bigram()
+  df <- bigr %>% as.character() %>% strsplit(., " ") %>% unlist() %>% matrix(., ncol = 2, byrow = T) %>% data.frame()
+  df$bigram <- bigr
+  return(df)
+}
+```
+
+```{r bigram}
+busi_bigram <- bigram_df(busi_corpus) #77409 3
+politics_bigram <- bigram_df(politics_corpus) #80767 3
+tech_bigram <- bigram_df(tech_corpus) #87409 3
+entertain_bigram <- bigram_df(entertain_corpus) #58608 3
+sport_bigram <- bigram_df(sport_corpus) #71686 3
+```
+
+```{r bigram csv}
+write.csv(busi_bigram, file = "../output/busi_bigram.csv")
+write.csv(entertain_bigram, file = "../output/entertain_bigram.csv")
+write.csv(politics_bigram, file = "../output/politics_bigram.csv")
+write.csv(sport_bigram, file = "../output/sport_bigram.csv")
+write.csv(tech_bigram, file = "../output/tech_bigram.csv")
+```
+
 
