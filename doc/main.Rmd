@@ -124,9 +124,11 @@ write.csv(sport_biletter, file = "../output/sport_biletter.csv",row.names = F)
 *bi-letter*
 ```{r}
 # Business
-busi_biletter[,1:2] %>% 
+busi_confu_matrix <- busi_biletter[,1:2] %>% 
   table()  %>% tbl_df() %>%
-  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) %>%
+  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) 
+
+busi_confu_matrix %>%
   ggplot(., aes(x=X1, y=X2, fill=n)) +
   geom_tile() + theme_bw() + coord_equal() +
   scale_fill_distiller(palette="Greens", direction=1) +
@@ -134,9 +136,11 @@ busi_biletter[,1:2] %>%
 ```
 ```{r}
 # Politics
-politics_biletter[,1:2] %>% 
+politics_confu_matrix <- politics_biletter[,1:2] %>% 
   table()  %>% tbl_df() %>%
-  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) %>%
+  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) 
+
+politics_confu_matrix %>%
   ggplot(., aes(x=X1, y=X2, fill=n)) +
   geom_tile() + theme_bw() + coord_equal() +
   scale_fill_distiller(palette="Greens", direction=1) +
@@ -144,9 +148,11 @@ politics_biletter[,1:2] %>%
 ```
 ```{r}
 # Entertainment
-entertain_biletter[,1:2] %>% 
+entertain_confu_matrix <- entertain_biletter[,1:2] %>% 
   table()  %>% tbl_df() %>%
-  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) %>%
+  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) 
+
+entertain_confu_matrix %>%
   ggplot(., aes(x=X1, y=X2, fill=n)) +
   geom_tile() + theme_bw() + coord_equal() +
   scale_fill_distiller(palette="Greens", direction=1) +
@@ -154,9 +160,11 @@ entertain_biletter[,1:2] %>%
 ```
 ```{r}
 # Sport
-sport_biletter[,1:2] %>% 
+sport_confu_matrix <- sport_biletter[,1:2] %>% 
   table()  %>% tbl_df() %>%
-  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) %>%
+  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) 
+
+sport_confu_matrix %>%
   ggplot(., aes(x=X1, y=X2, fill=n)) +
   geom_tile() + theme_bw() + coord_equal() +
   scale_fill_distiller(palette="Greens", direction=1) +
@@ -165,9 +173,10 @@ sport_biletter[,1:2] %>%
 
 ```{r}
 # Technology
-tech_biletter[,1:2] %>% 
+tech_confu_matrix <- tech_biletter[,1:2] %>% 
   table()  %>% tbl_df() %>%
-  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) %>%
+  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) 
+tech_confu_matrix %>%
   ggplot(., aes(x=X1, y=X2, fill=n)) +
   geom_tile() + theme_bw() + coord_equal() +
   scale_fill_distiller(palette="Greens", direction=1) +
