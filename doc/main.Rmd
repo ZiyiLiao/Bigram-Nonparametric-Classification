@@ -64,16 +64,17 @@ dictionary <- function(bigr_lib, path){
     unnest_tokens(dictionary, text) %>%
     anti_join(stop_words,by = c("dictionary" = "word")) 
 
-  list <- completed$dictionary
+  list <- completed$dictionary %>% paste(., collapse = " ")
+  
   return(list)
 }
 
 
-busi_corpus <- dictionary(busi_bigr_lib, busi_location)# length 77410
-entertain_corpus <- dictionary(entertain_bigr_lib, entertain_location) # 58609
-politics_corpus <- dictionary(politics_bigr_lib, politics_location) #80768
-sport_corpus <- dictionary(sport_bigr_lib, sport_location) #71687
-tech_corpus <- dictionary(tech_bigr_lib, tech_location) #87410
+busi_corpus <- dictionary(busi_bigr_lib, busi_location)
+entertain_corpus <- dictionary(entertain_bigr_lib, entertain_location)
+politics_corpus <- dictionary(politics_bigr_lib, politics_location)
+sport_corpus <- dictionary(sport_bigr_lib, sport_location)
+tech_corpus <- dictionary(tech_bigr_lib, tech_location)
 ```
 
 ### Step 1: Bi-letter
@@ -103,50 +104,97 @@ into_dataframe <- function(list){
 }
 ```
 ```{r biletter}
-busi_biletter <- busi_corpus %>% biletter_list() %>% into_dataframe() # 445952 3
-politics_biletter <- politics_corpus %>% biletter_list() %>% into_dataframe() #466856 3
-entertain_biletter <- entertain_corpus %>% biletter_list() %>% into_dataframe() #314031 3
-tech_biletter <- tech_corpus %>% biletter_list() %>% into_dataframe() # 498800 3
-sport_biletter <- sport_corpus %>% biletter_list() %>% into_dataframe() #386531 3
+busi_biletter <- busi_corpus %>% biletter_list() %>% into_dataframe() # 600770 3
+politics_biletter <- politics_corpus %>% biletter_list() %>% into_dataframe() #628390 3
+entertain_biletter <- entertain_corpus %>% biletter_list() %>% into_dataframe() #431247 3
+tech_biletter <- tech_corpus %>% biletter_list() %>% into_dataframe() # 673618 3
+sport_biletter <- sport_corpus %>% biletter_list() %>% into_dataframe() # 529903 3
 ```
 ```{r biletter csv}
 
-write.csv(busi_biletter, file = "../output/busi_biletter.csv")
-write.csv(politics_biletter, file = "../output/politics_biletter.csv")
-write.csv(entertain_biletter, file = "../output/entertain_biletter.csv")
-write.csv(tech_biletter, file = "../output/tech_biletter.csv")
-write.csv(sport_biletter, file = "../output/sport_biletter.csv")
+write.csv(busi_biletter, file = "../output/busi_biletter.csv", row.names = F)
+write.csv(politics_biletter, file = "../output/politics_biletter.csv",row.names = F)
+write.csv(entertain_biletter, file = "../output/entertain_biletter.csv",row.names = F)
+write.csv(tech_biletter, file = "../output/tech_biletter.csv",row.names = F)
+write.csv(sport_biletter, file = "../output/sport_biletter.csv",row.names = F)
 
 ```
 
-### Step 2: Bigram
-```{r bigram functions}
-bigram <- function(token){
-  return(vapply(ngrams(token,2L), paste,"", collapse = " "))
+### Step 3: Heatmap
+*bi-letter*
+```{r}
+# Business
+busi_biletter[,1:2] %>% 
+  table()  %>% tbl_df() %>%
+  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) %>%
+  ggplot(., aes(x=X1, y=X2, fill=n)) +
+  geom_tile() + theme_bw() + coord_equal() +
+  scale_fill_distiller(palette="Greens", direction=1) +
+  labs(x = "The First Letter", y = "The Second Letter", title = "Bi-letter from Business News")
+```
+```{r}
+# Politics
+politics_biletter[,1:2] %>% 
+  table()  %>% tbl_df() %>%
+  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) %>%
+  ggplot(., aes(x=X1, y=X2, fill=n)) +
+  geom_tile() + theme_bw() + coord_equal() +
+  scale_fill_distiller(palette="Greens", direction=1) +
+  labs(x = "The First Letter", y = "The Second Letter", title = "Bi-letter from Politics News")
+```
+```{r}
+# Entertainment
+entertain_biletter[,1:2] %>% 
+  table()  %>% tbl_df() %>%
+  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) %>%
+  ggplot(., aes(x=X1, y=X2, fill=n)) +
+  geom_tile() + theme_bw() + coord_equal() +
+  scale_fill_distiller(palette="Greens", direction=1) +
+  labs(x = "The First Letter", y = "The Second Letter", title = "Bi-letter from Entertainment News")
+```
+```{r}
+# Sport
+sport_biletter[,1:2] %>% 
+  table()  %>% tbl_df() %>%
+  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) %>%
+  ggplot(., aes(x=X1, y=X2, fill=n)) +
+  geom_tile() + theme_bw() + coord_equal() +
+  scale_fill_distiller(palette="Greens", direction=1) +
+  labs(x = "The First Letter", y = "The Second Letter", title = "Bi-letter from Sport News")
+```
+
+```{r}
+# Technology
+tech_biletter[,1:2] %>% 
+  table()  %>% tbl_df() %>%
+  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) %>%
+  ggplot(., aes(x=X1, y=X2, fill=n)) +
+  geom_tile() + theme_bw() + coord_equal() +
+  scale_fill_distiller(palette="Greens", direction=1) +
+  labs(x = "The First Letter", y = "The Second Letter", title = "Bi-letter from Technology News")
+```
+
+### Step 4: SVM
+```{r}
+library(kernlab)
+
+busi_bigram <- read.csv("../output/busi_bigram.csv")
+entertain_bigram <- read.csv("../output/entertain_bigram.csv")
+politics_bigram <- read.csv("../output/politics_bigram.csv")
+sport_bigram <- read.csv("../output/sport_bigram.csv")
+tech_bigram <- read.csv("../output/tech_bigram.csv")
+
+select.train <- function(df){
+  n <- dim(df)[1]
+  ind <- sample(1:n, floor(n*0.7), replace = F)
+  return(df[ind,])
 }
 
-bigram_df <- function(corpus){
-  bigr <- corpus %>% bigram()
-  df <- bigr %>% as.character() %>% strsplit(., " ") %>% unlist() %>% matrix(., ncol = 2, byrow = T) %>% data.frame()
-  df$bigram <- bigr
-  return(df)
-}
-```
+train <- ddply(data, .(label), select.train)
+train_input <- train[,3] %>% as.vector()
+train_labels <- train[,4] %>% as.vector()
 
-```{r bigram}
-busi_bigram <- bigram_df(busi_corpus) #77409 3
-politics_bigram <- bigram_df(politics_corpus) #80767 3
-tech_bigram <- bigram_df(tech_corpus) #87409 3
-entertain_bigram <- bigram_df(entertain_corpus) #58608 3
-sport_bigram <- bigram_df(sport_corpus) #71686 3
-```
+fit_svm <- ksvm(train_input, as.factor(train_labels), type = "C-svc", kernel = "rbfdot")
 
-```{r bigram csv}
-write.csv(busi_bigram, file = "../output/busi_bigram.csv")
-write.csv(entertain_bigram, file = "../output/entertain_bigram.csv")
-write.csv(politics_bigram, file = "../output/politics_bigram.csv")
-write.csv(sport_bigram, file = "../output/sport_bigram.csv")
-write.csv(tech_bigram, file = "../output/tech_bigram.csv")
 ```
-
 
