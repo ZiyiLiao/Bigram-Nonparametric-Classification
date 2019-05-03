@@ -87,17 +87,39 @@ density <- function(reference){
   
   trans.prob.mat <- (trans.mat+1) / sum(trans.mat)
   all_letters <- expand.grid(colnames(trans.prob.mat),rownames(trans.prob.mat)) %>%
-    unite(., letters, c(Var1, Var2), remove=T, sep = "") 
+    unite(., letters, c(Var1, Var2), remove=T, sep = "") %>% as.matrix() %>% as.vector()
   freq <- as.vector(trans.prob.mat)
-  return(list(freq = freq, letters = all_letters))
+  names(freq) <- all_letters
+  return(freq)
 }
 
-extract.features <- function(bigr_lib,k){
+
+extract.features <- function(bigr_lib,k = NA){
   features <- matrix(NA, nrow = length(bigr_lib), ncol = 729)
   for(i in 1:length(bigr_lib)){
     b <- bigr_lib[[i]] %>% dictionary() %>% density()
-    features[i,] <- b$freq
+    features[i,] <- b
+    colnames(features) <- names(b)
   }
   labels <- rep(k, length(bigr_lib))
   return(list(features = features, labels = labels))
 }
+
+
+
+KLD.label <- function(file){
+  kld_busi <- KLD(busi_train,file)$sum.KLD.px.py/KLD(busi_train,rep(0,729))$sum.KLD.px.py
+  kld_politics <- KLD(politics_train,file)$sum.KLD.px.py/KLD(politics_train,rep(0,729))$sum.KLD.px.py
+  kld_entertain <- KLD(entertain_train,file)$sum.KLD.px.py/KLD(entertain_train,rep(0,729))$sum.KLD.px.py
+  kld_sport <- KLD(sport_train,file)$sum.KLD.px.py/KLD(sport_train,rep(0,729))$sum.KLD.px.py
+  kld_tech <- KLD(tech_train,t1)$sum.KLD.px.py/KLD(tech_train,rep(0,729))$sum.KLD.px.py
+  
+  kld.dist <- cbind(kld_busi, kld_politics, kld_entertain, kld_sport, kld_tech)
+  labels <- c("business", "politics", "entertainment","sport","technology")
+  
+  ind <- which.min(kld.dist)
+  return(labels[ind])
+}
+
+
+
