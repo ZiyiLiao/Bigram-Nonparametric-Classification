@@ -19,12 +19,15 @@ output:
 library(tm)
 library(dplyr)
 library(tidytext)
+library(kernlab)
 
 busi_location <- "../data/bbc/business/"
 entertain_location <- "../data/bbc/entertainment/"
 politics_location <- "../data/bbc/politics/"
 sport_location <- "../data/bbc/sport/"
 tech_location <- "../data/bbc/tech/"
+
+source("../lib/functions.R")
 ```
 
 ```{r read_text}
@@ -35,8 +38,10 @@ read_txt <- function(file_name, file_loca){
 }
 
 busi_bigr_lib <- busi_location %>% list.files() %>% lapply(., read_txt,busi_location)
-entertain_bigr_lib <- entertain_location %>% list.files() %>% lapply(., read_txt,entertain_location)
-politics_bigr_lib <- politics_location %>%list.files() %>% lapply(., read_txt,politics_location)
+entertain_bigr_lib <- entertain_location %>% list.files() %>%
+  lapply(., read_txt,entertain_location)
+politics_bigr_lib <- politics_location %>%list.files() %>% 
+  lapply(., read_txt,politics_location)
 sport_bigr_lib <- sport_location %>% list.files() %>% lapply(., read_txt, sport_location)
 tech_bigr_lib <- tech_location %>% list.files() %>% lapply(., read_txt, tech_location)
 ```
@@ -49,86 +54,43 @@ word <- c("bn","ago","yesterday","lot","today","months","month",
 stop_words <- stop_words %>% bind_rows(mutate(tibble(word), lexicon = "updated")) 
 ```
 
-```{r}
-dictionary <- function(bigr_lib, path){
-  corpus<- VCorpus(VectorSource(bigr_lib))%>%
-    tm_map(content_transformer(tolower))%>%
-    tm_map(removePunctuation)%>%
-    tm_map(removeNumbers)%>%
-    tm_map(removeWords, character(0))%>%
-    tm_map(stripWhitespace)
+### Step 1: Heatmap
+```{r corpus}
+busi_corpus <- dictionary(busi_bigr_lib)
+entertain_corpus <- dictionary(entertain_bigr_lib)
+politics_corpus <- dictionary(politics_bigr_lib)
+sport_corpus <- dictionary(sport_bigr_lib)
+tech_corpus <- dictionary(tech_bigr_lib)
 
-  dict <- tidy(corpus) %>% select(text)  
-  completed <- dict %>%
-    mutate(id = list.files(path))  %>%
-    unnest_tokens(dictionary, text) %>%
-    anti_join(stop_words,by = c("dictionary" = "word")) 
-
-  list <- completed$dictionary %>% paste(., collapse = " ")
-  
-  return(list)
-}
-
-
-busi_corpus <- dictionary(busi_bigr_lib, busi_location)
-entertain_corpus <- dictionary(entertain_bigr_lib, entertain_location)
-politics_corpus <- dictionary(politics_bigr_lib, politics_location)
-sport_corpus <- dictionary(sport_bigr_lib, sport_location)
-tech_corpus <- dictionary(tech_bigr_lib, tech_location)
-```
-
-### Step 1: Bi-letter
-```{r biletter functions}
-biletter <- function(token){
-  ## Split into characterss:
-  w <- strsplit(token, "")[[1]]
-  ## Word tri-grams pasted together:
-  return(vapply(ngrams(w, 2L), paste, "", collapse = ""))
-}
-
-
-biletter_list <- function(corpus){
-  letter <- list()
-  for(i in 1:length(corpus)){
-    letter[[i]]<- corpus[i] %>% as.character() %>% biletter()
-    }
-  letter <- unlist(letter)
-  return(letter)
-}
-
-
-into_dataframe <- function(list){
-  df <- list %>% as.character() %>% strsplit(.,"") %>% unlist() %>% matrix(.,ncol = 2, byrow = T) %>% data.frame()
-  df$biletter <- list
-  return(df)
-}
-```
-```{r biletter}
 busi_biletter <- busi_corpus %>% biletter_list() %>% into_dataframe() # 600770 3
 politics_biletter <- politics_corpus %>% biletter_list() %>% into_dataframe() #628390 3
 entertain_biletter <- entertain_corpus %>% biletter_list() %>% into_dataframe() #431247 3
 tech_biletter <- tech_corpus %>% biletter_list() %>% into_dataframe() # 673618 3
 sport_biletter <- sport_corpus %>% biletter_list() %>% into_dataframe() # 529903 3
 ```
+
 ```{r biletter csv}
 
-write.csv(busi_biletter, file = "../output/busi_biletter.csv", row.names = F)
-write.csv(politics_biletter, file = "../output/politics_biletter.csv",row.names = F)
-write.csv(entertain_biletter, file = "../output/entertain_biletter.csv",row.names = F)
-write.csv(tech_biletter, file = "../output/tech_biletter.csv",row.names = F)
-write.csv(sport_biletter, file = "../output/sport_biletter.csv",row.names = F)
+#write.csv(busi_biletter, file = "../output/busi_biletter.csv", row.names = F)
+#write.csv(politics_biletter, file = "../output/politics_biletter.csv",row.names = F)
+#write.csv(entertain_biletter, file = "../output/entertain_biletter.csv",row.names = F)
+#write.csv(tech_biletter, file = "../output/tech_biletter.csv",row.names = F)
+#write.csv(sport_biletter, file = "../output/sport_biletter.csv",row.names = F)
 
 ```
 
-### Step 3: Heatmap
-*bi-letter*
 ```{r}
 # Business
-busi_confu_matrix <- busi_biletter[,1:2] %>% 
+busi_df <- busi_biletter[,1:2] %>% 
   table()  %>% tbl_df() %>%
   mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) 
 
-busi_confu_matrix %>%
+busi_density <- unite(busi_df, letters, c(X1, X2), remove=T, sep = "") 
+busi_density$freq <- (busi_density$n+1)/sum(busi_density$n)
+all_letters <- busi_density[,1]
+
+
+busi_df %>%
   ggplot(., aes(x=X1, y=X2, fill=n)) +
   geom_tile() + theme_bw() + coord_equal() +
   scale_fill_distiller(palette="Greens", direction=1) +
@@ -136,23 +98,32 @@ busi_confu_matrix %>%
 ```
 ```{r}
 # Politics
-politics_confu_matrix <- politics_biletter[,1:2] %>% 
+politics_df <- politics_biletter[,1:2] %>% 
   table()  %>% tbl_df() %>%
   mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) 
 
-politics_confu_matrix %>%
+politics_density <- unite(politics_df, letters, c(X1, X2), remove=T, sep = "") 
+politics_density$freq <- (politics_density$n+1)/sum(politics_density$n)
+
+
+politics_df%>%
   ggplot(., aes(x=X1, y=X2, fill=n)) +
   geom_tile() + theme_bw() + coord_equal() +
   scale_fill_distiller(palette="Greens", direction=1) +
   labs(x = "The First Letter", y = "The Second Letter", title = "Bi-letter from Politics News")
 ```
+
+
 ```{r}
 # Entertainment
-entertain_confu_matrix <- entertain_biletter[,1:2] %>% 
+entertain_df <- entertain_biletter[,1:2] %>% 
   table()  %>% tbl_df() %>%
   mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) 
 
-entertain_confu_matrix %>%
+entertain_density <- unite(entertain_df, letters, c(X1, X2), remove=T, sep = "") 
+entertain_density$freq <- (entertain_density$n+1)/sum(entertain_density$n)
+
+entertain_df %>%
   ggplot(., aes(x=X1, y=X2, fill=n)) +
   geom_tile() + theme_bw() + coord_equal() +
   scale_fill_distiller(palette="Greens", direction=1) +
@@ -160,11 +131,15 @@ entertain_confu_matrix %>%
 ```
 ```{r}
 # Sport
-sport_confu_matrix <- sport_biletter[,1:2] %>% 
+sport_df <- sport_biletter[,1:2] %>% 
   table()  %>% tbl_df() %>%
   mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) 
 
-sport_confu_matrix %>%
+sport_density <- unite(sport_df, letters, c(X1, X2), remove=T, sep = "") 
+sport_density$freq <- (sport_density$n+1)/sum(sport_density$n)
+
+
+sport_df %>%
   ggplot(., aes(x=X1, y=X2, fill=n)) +
   geom_tile() + theme_bw() + coord_equal() +
   scale_fill_distiller(palette="Greens", direction=1) +
@@ -173,37 +148,76 @@ sport_confu_matrix %>%
 
 ```{r}
 # Technology
-tech_confu_matrix <- tech_biletter[,1:2] %>% 
+tech_df <- tech_biletter[,1:2] %>% 
   table()  %>% tbl_df() %>%
   mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) 
-tech_confu_matrix %>%
+
+tech_density <- unite(tech_df, letters, c(X1, X2), remove=T, sep = "") 
+tech_density$freq <- (tech_density$n+1)/sum(tech_density$n)
+
+tech_df %>%
   ggplot(., aes(x=X1, y=X2, fill=n)) +
   geom_tile() + theme_bw() + coord_equal() +
   scale_fill_distiller(palette="Greens", direction=1) +
   labs(x = "The First Letter", y = "The Second Letter", title = "Bi-letter from Technology News")
 ```
 
-### Step 4: SVM
+
+### Step 2: SVM 
+```{r features}
+
+busi_feat <- extract.features(busi_bigr_lib,1)
+sport_feat <- extract.features(sport_bigr_lib,2)
+entertain_feat <- extract.features(entertain_bigr_lib,3)
+politics_feat <- extract.features(politics_bigr_lib,4)
+tech_feat <- extract.features(tech_bigr_lib,5)
+
+```
+
+```{r train set}
+# 70% data as train set
+set.seed(0)
+busi_ind <- train.ind(busi_bigr_lib)
+politics_ind <- train.ind(politics_bigr_lib)
+entertain_ind <- train.ind(entertain_bigr_lib)
+sport_ind <- train.ind(sport_bigr_lib)
+tech_ind <- train.ind(tech_bigr_lib)
+
+train_feat <- list(features = rbind(busi_feat$features[busi_ind,],
+                      politics_feat$features[politics_ind,],
+                      entertain_feat$features[entertain_ind,],
+                      sport_feat$features[sport_ind,],
+                      tech_feat$features[tech_ind,]), 
+                   labels = c(busi_feat$labels[busi_ind], 
+                              politics_feat$labels[politics_ind],
+                              entertain_feat$labels[entertain_ind],
+                              sport_feat$labels[sport_ind],
+                              tech_feat$labels[tech_ind]))
+
+test_feat <- list(features = rbind(busi_feat$features[-busi_ind,],
+                      politics_feat$features[-politics_ind,],
+                      entertain_feat$features[-entertain_ind,],
+                      sport_feat$features[-sport_ind,],
+                      tech_feat$features[-tech_ind,]), 
+                   labels = c(busi_feat$labels[-busi_ind], 
+                              politics_feat$labels[-politics_ind],
+                              entertain_feat$labels[-entertain_ind],
+                              sport_feat$labels[-sport_ind],
+                              tech_feat$labels[-tech_ind]))
+
+# save(train_feat, file = "../output/train_feat.RData")
+# save(test_feat, file = "../output/test_feat.RData")
+```
+
 ```{r}
-library(kernlab)
+fit_svm <- ksvm(train_feat$features, as.factor(train_feat$labels), type = "C-svc", kernel = "rbfdot")
+test_pred <- predict(fit_svm, test_feat$features)
+test_error <- sum(test_pred != test_feat$labels)/sum(test_feat$labels)
+cat("train error:",fit_svm@error, "\n","test error:", test_error)
+```
 
-busi_bigram <- read.csv("../output/busi_bigram.csv")
-entertain_bigram <- read.csv("../output/entertain_bigram.csv")
-politics_bigram <- read.csv("../output/politics_bigram.csv")
-sport_bigram <- read.csv("../output/sport_bigram.csv")
-tech_bigram <- read.csv("../output/tech_bigram.csv")
-
-select.train <- function(df){
-  n <- dim(df)[1]
-  ind <- sample(1:n, floor(n*0.7), replace = F)
-  return(df[ind,])
-}
-
-train <- ddply(data, .(label), select.train)
-train_input <- train[,3] %>% as.vector()
-train_labels <- train[,4] %>% as.vector()
-
-fit_svm <- ksvm(train_input, as.factor(train_labels), type = "C-svc", kernel = "rbfdot")
+### Step 3: New file
+```{r}
 
 ```
 
