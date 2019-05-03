@@ -166,11 +166,11 @@ tech_df %>%
 ### Step 2: SVM 
 ```{r features}
 
-busi_feat <- extract.features(busi_bigr_lib,1)
-sport_feat <- extract.features(sport_bigr_lib,2)
-entertain_feat <- extract.features(entertain_bigr_lib,3)
-politics_feat <- extract.features(politics_bigr_lib,4)
-tech_feat <- extract.features(tech_bigr_lib,5)
+busi_feat <- extract.features(busi_bigr_lib,"business")
+sport_feat <- extract.features(sport_bigr_lib,"sport")
+entertain_feat <- extract.features(entertain_bigr_lib,"entertainment")
+politics_feat <- extract.features(politics_bigr_lib,"politics")
+tech_feat <- extract.features(tech_bigr_lib,"technology")
 
 ```
 
@@ -212,7 +212,7 @@ test_feat <- list(features = rbind(busi_feat$features[-busi_ind,],
 ```{r}
 fit_svm <- ksvm(train_feat$features, as.factor(train_feat$labels), type = "C-svc", kernel = "rbfdot")
 test_pred <- predict(fit_svm, test_feat$features)
-test_error <- sum(test_pred != test_feat$labels)/sum(test_feat$labels)
+test_error <- sum(test_pred != as.factor(test_feat$labels))/length(test_feat$labels)
 cat("train error:",fit_svm@error, "\n","test error:", test_error)
 ```
 
