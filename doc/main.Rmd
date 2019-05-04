@@ -20,7 +20,9 @@ library(tm)
 library(dplyr)
 library(tidytext)
 library(kernlab)
+library(tidyr)
 library(LaplacesDemon)
+library(knitr)
 
 busi_location <- "../data/bbc/business/"
 entertain_location <- "../data/bbc/entertainment/"
@@ -32,11 +34,6 @@ source("../lib/functions.R")
 ```
 
 ```{r read_text}
-read_txt <- function(file_name, file_loca){
-  current_file_name <- sub(".txt","",file_name)
-  current_ground_truth <- readLines(paste(file_loca,current_file_name,".txt",sep=""), encoding="UTF-8",warn=FALSE)
-  return(current_ground_truth)
-}
 
 busi_bigr_lib <- busi_location %>% list.files() %>% lapply(., read_txt,busi_location)
 entertain_bigr_lib <- entertain_location %>% list.files() %>%
@@ -45,6 +42,7 @@ politics_bigr_lib <- politics_location %>%list.files() %>%
   lapply(., read_txt,politics_location)
 sport_bigr_lib <- sport_location %>% list.files() %>% lapply(., read_txt, sport_location)
 tech_bigr_lib <- tech_location %>% list.files() %>% lapply(., read_txt, tech_location)
+
 ```
 
 ```{r stop words}
@@ -184,8 +182,11 @@ entertain_ind <- train.ind(entertain_bigr_lib)
 sport_ind <- train.ind(sport_bigr_lib)
 tech_ind <- train.ind(tech_bigr_lib)
 
-ind <- cbind(busi_ind, politics_ind, entertain_ind, sport_ind, tech_ind)
-save(ind, file = "../output/train_index.RData")
+
+ind <- list(busi_ind, politics_ind, entertain_ind, sport_ind, tech_ind)
+
+# save(ind, file = "../output/train_index.RData")
+
 
 train_feat <- list(features = rbind(busi_feat$features[busi_ind,],
                       politics_feat$features[politics_ind,],
@@ -209,25 +210,96 @@ test_feat <- list(features = rbind(busi_feat$features[-busi_ind,],
                               sport_feat$labels[-sport_ind],
                               tech_feat$labels[-tech_ind]))
 
-save(train_feat, file = "../output/train_feat.RData")
-save(test_feat, file = "../output/test_feat.RData")
+# save(train_feat, file = "../output/train_feat.RData")
+# save(test_feat, file = "../output/test_feat.RData")
+# load("../output/train_feat.RData")
+# load("../output/test_feat.RData")
+```
+
+```{r message=FALSE}
+
+fit_svm <- ksvm(train_feat$features, as.factor(train_feat$labels), type = "C-svc")
+svm_test_pred <- predict(fit_svm, test_feat$features)
+svm_test_error <- sum(svm_test_pred != as.factor(test_feat$labels))/length(test_feat$labels)
+cat("SVM train error:",fit_svm@error, "\n","SVM test error:", svm_test_error)
+
+```
+
+### Step 3: KLD
+```{r}
+busi_train <- list.files(busi_location)[busi_ind] %>% 
+  lapply(., read_txt,busi_location) %>% 
+  dictionary() %>% toString() %>% density()
+# save(busi_train, file = "../output/busi_train.RData")
+
+
+sport_train <- list.files(sport_location)[sport_ind] %>%
+  lapply(., read_txt,sport_location) %>% 
+  dictionary() %>% toString() %>% density()
+# save(sport_train, file = "../output/sport_train.RData")
+
+politics_train <- list.files(politics_location)[politics_ind] %>% 
+  lapply(., read_txt,politics_location) %>% dictionary() %>%
+  toString() %>% density()
+# save(politics_train, file = "../output/politics_train.RData")
+
+
+entertain_train <- list.files(entertain_location)[entertain_ind] %>% 
+  lapply(., read_txt,entertain_location) %>% dictionary() %>%
+  toString() %>% density()
+# save(entertain_train, file = "../output/entertain_train.RData")
+
+tech_train <- list.files(tech_location)[tech_ind] %>% 
+  lapply(., read_txt,tech_location) %>% dictionary() %>%
+  toString() %>% density()
+# save(tech_train, file = "../output/tech_train.RData")
+
 ```
 
 ```{r}
-fit_svm <- ksvm(train_feat$features, as.factor(train_feat$labels), type = "C-svc", kernel = "rbfdot")
-test_pred <- predict(fit_svm, test_feat$features)
-test_error <- sum(test_pred != as.factor(test_feat$labels))/length(test_feat$labels)
-cat("train error:",fit_svm@error, "\n","test error:", test_error)
+#load("../output/busi_train.RData")
+#load("../output/sport_train.RData")
+#load("../output/politics_train.RData")
+#load("../output/entertain_train.RData")
+#load("../output/tech_train.RData")
+```
+
+```{r}
+
+kld_train_pred <- rep(NA, nrow(train_feat$features))
+for(i in 1:length(train_feat$labels)){
+  kld_train_pred[i] <-   KLD.label(train_feat$features[i,])
+}
+
+table(kld_train_pred, train_feat$labels)
+
+```
+
+```{r}
+kld_train_err <- sum(kld_train_pred != train_feat$labels)/length(train_feat$labels)
+cat("KLD train error:", kld_train_err)
+```
+
+```{r}
+kld_test_pred <- rep(NA, nrow(test_feat$features))
+for(i in 1:length(test_feat$labels)){
+  kld_test_pred[i] <-   KLD.label(test_feat$features[i,])
+}
+table(kld_test_pred, test_feat$labels)
+```
+```{r}
+kld_test_err <- sum(kld_test_pred != test_feat$labels)/length(test_feat$labels)
+cat("KLD test error:", kld_test_err)
 ```
 
 ### Step 3: New file
+*SVM prediction*
 ```{r}
 athletics_location <- "../data/bbcsports/athletics/"
 athletics_feat <- athletics_location %>% list.files() %>% 
   lapply(., read_txt,athletics_location) %>% 
   lapply(.,dictionary) %>% extract.features(.,k=NA)
-atheletics_pred <- predict(fit_svm, athletics_feat$features)
-
+athletics_pred <- predict(fit_svm, athletics_feat$features)
 
 cricket_location <- "../data/bbcsports/cricket/"
 cricket_feat <- cricket_location %>% list.files() %>% 
@@ -253,72 +325,50 @@ tennis_feat <- tennis_location %>% list.files() %>%
   lapply(., read_txt,tennis_location) %>% 
   lapply(.,dictionary) %>% extract.features(.,k=NA)
 tennis_pred <- predict(fit_svm, tennis_feat$features)
-
-
-results <- rbind(table(atheletics_pred),table(cricket_pred), table(football_pred),table(rugby_pred),table(tennis_pred))
-rownames(results) <- c("athletics", "cricket", "football", "rugby","tennis")
-results
-```
-```{r}
-err <- 1-apply(results, 2, sum)/sum(results)
-cat("error:",err[4])
 ```
 
-### Step 4: KLD
 ```{r}
-file <- train_feat$features[1,]
 
-busi_train <- list.files(busi_location) %>% 
-  lapply(., read_txt,busi_location) %>% 
-  dictionary() %>% toString() %>% density()
-save(busi_train, file = "../output/busi_train.RData")
-
-sport_train <- list.files(sport_location) %>%
-  lapply(., read_txt,sport_location) %>% 
-  dictionary() %>% toString() %>% density()
-save(sport_train, file = "../output/sport_train.RData")
-
-politics_train <- list.files(politics_location) %>% 
-  lapply(., read_txt,politics_location) %>% dictionary() %>%
-  toString() %>% density()
-save(politics_train, file = "../output/politics_train.RData")
-
-
-entertain_train <- list.files(entertain_location) %>% 
-  lapply(., read_txt,entertain_location) %>% dictionary() %>%
-  toString() %>% density()
-save(entertain_train, file = "../output/entertain_train.RData")
-
-tech_train <- list.files(tech_location) %>% 
-  lapply(., read_txt,tech_location) %>% dictionary() %>%
-  toString() %>% density()
-save(tech_train, file = "../output/tech_train.RData")
+svm_results <- rbind(table(athletics_pred),table(cricket_pred), table(football_pred),table(rugby_pred),table(tennis_pred))
+rownames(svm_results) <- c("athletics", "cricket", "football", "rugby","tennis")
+svm_results
 
 ```
 
 ```{r}
-kld_train_pred <- rep(NA, nrow(train_feat$features))
-for(i in 1:length(train_feat$labels)){
-  kld_train_pred[i] <-   KLD.label(train_feat$features[i,])
-}
-table(kld_train_pred, train_feat$labels)
+svm_pred_err <- 1-apply(svm_results, 2, sum)/sum(svm_results)
+cat("SVM predict error:",svm_pred_err[4])
+```
+
+*KLD prediction*
+```{r}
+athletics_kld_pred <- athletics_feat %>% KLD.pred() %>% as.factor()
+cricket_kld_pred <- cricket_feat %>% KLD.pred()
+football_kld_pred <- football_feat %>% KLD.pred()
+rugby_kld_pred <- rugby_feat %>%  KLD.pred()
+tennis_kld_pred <- tennis_feat %>% KLD.pred()
 ```
 
 ```{r}
-kld_train_err <- sum(kld_train_pred != train_feat$labels)/length(train_feat$labels)
-cat("KLD train error:", kld_train_err)
+
+kld_err <- sum(sum(athletics_kld_pred != "sport"),  sum(cricket_kld_pred != "sport"), sum(football_kld_pred != "sport"), sum(rugby_kld_pred != "sport"), sum(tennis_kld_pred != "sport"))/sum(length(atheletics_pred),length(cricket_kld_pred), length(football_kld_pred), length(rugby_kld_pred), length(tennis_kld_pred))
+cat("KLD error:", kld_err)
+  
 ```
 
-```{r}
-kld_test_pred <- rep(NA, nrow(test_feat$features))
-for(i in 1:length(test_feat$labels)){
-  kld_test_pred[i] <-   KLD.label(test_feat$features[i,])
-}
-table(kld_test_pred, test_feat$labels)
-```
-```{r}
-kld_test_err <- sum(kld_test_pred != test_feat$labels)/length(test_feat$labels)
-cat("KLD test error:", kld_test_err)
-```
 
+### Step 4: Comparing results
+*SVM*
+```{r}
+
+performance_table <- data.frame("Value" = rep(NA,4))
+row.names(performance_table) <- c("SVM train error", "SVM test error", "KLD train error", "KLD test error")
+performance_table[1,1] <- fit_svm@error
+performance_table[2,1] <- svm_test_error
+performance_table[3,1] <- kld_train_err
+performance_table[4,1] <- kld_test_err 
+
+kable(performance_table, caption = "Summary of Nonparametric Text Classification Performance")
+
+```
 
