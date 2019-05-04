@@ -358,7 +358,6 @@ cat("KLD error:", kld_err)
 
 
 ### Step 4: Comparing results
-*SVM*
 ```{r}
 
 performance_table <- data.frame("Value" = rep(NA,4))
