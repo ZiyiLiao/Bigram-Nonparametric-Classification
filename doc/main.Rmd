@@ -361,7 +361,7 @@ cat("KLD error:", kld_err)
 ```{r}
 
 performance_table <- data.frame("Value" = rep(NA,4))
-row.names(performance_table) <- c("SVM train error", "SVM test error", "KLD train error", "KLD test error")
+row.names(performance_table) <- c("SVM training error", "SVM test error", "KLD training error", "KLD test error")
 performance_table[1,1] <- fit_svm@error
 performance_table[2,1] <- svm_test_error
 performance_table[3,1] <- kld_train_err
