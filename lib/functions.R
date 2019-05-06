@@ -133,5 +133,27 @@ KLD.pred <- function(train_feat){
 }
 
 
+KLD.label.new <- function(file){
+  
+  kld_busi <- KLD(dic,file)$sum.KLD.px.py/KLD(dic,rep(0,729))$sum.KLD.px.py
+  kld_politics <- KLD(politics_train,file)$sum.KLD.px.py/KLD(politics_train,rep(0,729))$sum.KLD.px.py
+  kld_entertain <- KLD(entertain_train,file)$sum.KLD.px.py/KLD(entertain_train,rep(0,729))$sum.KLD.px.py
+  kld_sport <- KLD(sport_train,file)$sum.KLD.px.py/KLD(sport_train,rep(0,729))$sum.KLD.px.py
+  kld_tech <- KLD(tech_train,file)$sum.KLD.px.py/KLD(tech_train,rep(0,729))$sum.KLD.px.py
 
+  kld.dist <- cbind(kld_busi, kld_politics, kld_entertain, kld_sport, kld_tech)
+  labels <- c("business", "politics", "entertainment","sport","technology")
+  
+  ind <- which.min(kld.dist)
+  return(labels[ind])
+}
 
+KLD.pred.new <- function(train_feat){
+  
+  kld_train_pred <- rep(NA, nrow(train_feat$features))
+  for(i in 1:length(train_feat$labels)){
+    kld_train_pred[i] <-   KLD.label.new(train_feat$features[i,])
+  }
+  
+  return(kld_train_pred)
+}

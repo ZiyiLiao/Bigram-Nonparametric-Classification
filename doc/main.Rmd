@@ -184,9 +184,7 @@ tech_ind <- train.ind(tech_bigr_lib)
 
 
 ind <- list(busi_ind, politics_ind, entertain_ind, sport_ind, tech_ind)
-
 # save(ind, file = "../output/train_index.RData")
-
 
 train_feat <- list(features = rbind(busi_feat$features[busi_ind,],
                       politics_feat$features[politics_ind,],
@@ -231,7 +229,6 @@ busi_train <- list.files(busi_location)[busi_ind] %>%
   lapply(., read_txt,busi_location) %>% 
   dictionary() %>% toString() %>% density()
 # save(busi_train, file = "../output/busi_train.RData")
-
 
 sport_train <- list.files(sport_location)[sport_ind] %>%
   lapply(., read_txt,sport_location) %>% 
@@ -287,6 +284,7 @@ for(i in 1:length(test_feat$labels)){
 }
 table(kld_test_pred, test_feat$labels)
 ```
+
 ```{r}
 kld_test_err <- sum(kld_test_pred != test_feat$labels)/length(test_feat$labels)
 cat("KLD test error:", kld_test_err)
@@ -369,5 +367,140 @@ performance_table[4,1] <- kld_test_err
 
 kable(performance_table, caption = "Summary of Nonparametric Text Classification Performance")
 
+```
+
+```{r}
+# total files in each topic
+busi_nums <- busi_location %>% list.files() %>% length() 
+politics_nums <- politics_location %>% list.files() %>% length()
+entertain_nums <- entertain_location %>% list.files() %>% length()
+sport_nums <- sport_location %>% list.files() %>% length()
+tech_nums <- tech_location %>% list.files() %>% length()
+total_nums <- busi_nums + politics_nums + entertain_nums + sport_nums + tech_nums
+nums <- cbind(total_nums, busi_nums, politics_nums, entertain_nums, sport_nums, tech_nums)
+
+## training files in each topic
+a1 <- busi_ind %>% length()
+a2 <- politics_ind %>% length()
+a3 <- entertain_ind %>% length()
+a4 <- sport_ind %>% length()
+a5 <- tech_ind %>% length()
+a6 <- a1 + a2 +a3 + a4 + a5
+a7 <- cbind(a6,a1,a2,a3,a4,a5)
+
+
+## test files in each topic
+b1 <- total_nums - a6
+b2 <- busi_nums - a1
+b3 <- politics_nums - a2
+b4 <- entertain_nums - a3
+b5 <- sport_nums - a4
+b6 <- tech_nums - a5
+b7 <- cbind(b1,b2,b3,b4,b5,b6)
+
+
+## SVM training error
+
+c6 <- (3+4+3+1+1)/a6
+c1 <- 3/a1
+c2 <- 4/a3
+c3 <- 3/a2
+c4 <- 1/a4
+c5 <- 1/a5
+c7 <- cbind(c6,c1,c2,c3,c4,c5)
+
+
+## SVM test error
+
+d1 <- (5+6+2+5+1+11+3+2+1+1+6+3+1+1)/b1
+d2 <- 5/b2
+d3 <- 1-102/b4
+d4 <- 1-109/b3
+d5 <- 1-153/b5
+d6 <- 1-110/b6
+d7 <- cbind(d1,d2,d3,d4,d5,d6)
+
+
+## KLD training error
+e1 <- 1-345/a1
+e2 <- 1-229/a2
+e3 <- 1-233/a3
+e4 <- 1-319/a4
+e5 <- 1-252/a5
+e6 <- (9+3+17+8+12+40+4+7+11+23+10+3+2+20+4+2+2)/a6
+e7 <- cbind(e6,e1,e2,e3,e4,e5)
+
+
+## KLD test error
+
+f1 <- (2+2+3+5+4+8+14+3+3+4+12+2+9+5+2+5)/b1
+f2 <- 1 -146/b2
+f3 <- 1-102/b3
+f4 <- 1-99/b4
+f5 <- 1-102/b5
+f6 <- 1-100/b6
+f7 <- cbind(f1,f2,f3,f4,f5,f6)
+
+```
+```{r}
+topic_result <- data.frame(total = rep(NA,7), business = rep(NA,7), politics = rep(NA,7),
+                           entertainment = rep(NA,7), sport = rep(NA,7), technology = rep(NA,7))
+topic_result[1,] <- nums %>% as.character()
+topic_result[2,] <- a7 
+topic_result[3,] <- b7
+topic_result[4,] <- round(c7,4) 
+topic_result[5,] <- round(d7,4)
+topic_result[6,] <- round(e7,4)
+topic_result[7,] <- round(f7,4)
+
+
+row.names(topic_result) <- c("nums of files","nums of training files","nums of test files",
+                            "SVM training errors","SVM test errors", 
+                            "KLD training errors", "KLD test errors")
+
+
+topic_result
+```
+
+### Step 4: Try to add new topics
+```{r}
+file <- readLines("../data/bbc/business/001.txt") %>% strsplit(., split = " ") %>% unlist()
+L <- length(file)
+S <- 500
+boots <- list()
+
+for(s in 1:S){
+  indices <- sample(1:L, L*2, replace = T)
+  boots[[s]] <- file[indices]
+}
+
+boots <- boots %>% unlist() %>% dictionary() 
+dic <- boots %>% density()
+```
+
+```{r}
+busi_test <- list(features =busi_feat$features[-busi_ind,], labels = busi_feat$labels[-busi_ind])
+kld_busi_pre <- rep(NA, nrow(busi_test$features))
+for(i in 1:length(busi_test$labels)){
+  kld_busi_pre[i] <-   KLD.label(busi_test$features[i,])
+}
+
+kld_busi_new <- rep(NA, nrow(busi_test$features))
+for(i in 1:length(busi_test$labels)){
+  kld_busi_new[i] <-   KLD.label.new(busi_test$features[i,])
+}
+
+kld_err_pre <- sum(kld_busi_pre != busi_test$labels)/length(busi_test$labels)
+kld_err_new <- sum(kld_busi_new != busi_test$labels)/length(busi_test$labels)
+cat("KLD error (previous):", kld_err_pre, "\n", "KLD error (new):", kld_err_new)
+```
+```{r}
+file1 <- busi_test$features[3,]
+KLD(dic,file1)$sum.KLD.px.py/KLD(dic,rep(0,729))$sum.KLD.px.py
+KLD(busi_train,file1)$sum.KLD.px.py/KLD(busi_train,rep(0,729))$sum.KLD.px.py
+KLD(politics_train,file1)$sum.KLD.px.py/KLD(politics_train,rep(0,729))$sum.KLD.px.py
+KLD(entertain_train,file1)$sum.KLD.px.py/KLD(entertain_train,rep(0,729))$sum.KLD.px.py
+KLD(sport_train,file1)$sum.KLD.px.py/KLD(sport_train,rep(0,729))$sum.KLD.px.py
+KLD(tech_train,file1)$sum.KLD.px.py/KLD(tech_train,rep(0,729))$sum.KLD.px.py
 ```
 
