@@ -470,7 +470,7 @@ S <- 500
 boots <- list()
 
 for(s in 1:S){
-  indices <- sample(1:L, L*2, replace = T)
+  indices <- sample(1:L, L*3, replace = T)
   boots[[s]] <- file[indices]
 }
 
