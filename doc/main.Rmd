@@ -12,8 +12,7 @@ output:
     code_folding: hide
 ---
 
-### Step 0: Data Cleaning
-*create the corpus*
+### Step 0: loading data
 ```{r set up}
 # load the packages
 library(tm)
@@ -29,11 +28,15 @@ entertain_location <- "../data/bbc/entertainment/"
 politics_location <- "../data/bbc/politics/"
 sport_location <- "../data/bbc/sport/"
 tech_location <- "../data/bbc/tech/"
-
-source("../lib/functions.R")
 ```
 
-```{r read_text}
+```{r read txt}
+## a function for reading data
+read_txt <- function(file_name, file_loca){
+  current_file_name <- sub(".txt","",file_name)
+  current_ground_truth <- readLines(paste(file_loca,current_file_name,".txt",sep=""), encoding="UTF-8",warn=FALSE)
+  return(current_ground_truth)
+}
 
 busi_bigr_lib <- busi_location %>% list.files() %>% lapply(., read_txt,busi_location)
 entertain_bigr_lib <- entertain_location %>% list.files() %>%
@@ -42,129 +45,127 @@ politics_bigr_lib <- politics_location %>%list.files() %>%
   lapply(., read_txt,politics_location)
 sport_bigr_lib <- sport_location %>% list.files() %>% lapply(., read_txt, sport_location)
 tech_bigr_lib <- tech_location %>% list.files() %>% lapply(., read_txt, tech_location)
-
 ```
 
+
+### Step 1: Extract features
 ```{r stop words}
+## update the stop words
 data("stop_words")
 word <- c("bn","ago","yesterday","lot","today","months","month",
                  "happier","happiest","last","week","past")
-#add words in the stop_words and the level of lexicon is 'updated
+# add words in the stop_words and the level of lexicon is 'updated
 stop_words <- stop_words %>% bind_rows(mutate(tibble(word), lexicon = "updated")) 
 ```
 
-### Step 1: Heatmap
-```{r corpus}
-busi_corpus <- dictionary(busi_bigr_lib)
-entertain_corpus <- dictionary(entertain_bigr_lib)
-politics_corpus <- dictionary(politics_bigr_lib)
-sport_corpus <- dictionary(sport_bigr_lib)
-tech_corpus <- dictionary(tech_bigr_lib)
+```{r dictionary}
+## a function for creating a corpus
+dictionary <- function(bigr_lib){
+  
+  # creating a corpus
+  corpus<- VCorpus(VectorSource(bigr_lib))%>%
+    tm_map(content_transformer(tolower))%>%  # to lower case letters
+    tm_map(removePunctuation)%>%             # remove punctuations
+    tm_map(removeNumbers)%>%                 # remove numbers  
+    tm_map(removeWords, character(0))%>%     # remove character(0)
+    tm_map(stripWhitespace)                  # remove extra whitespace
+  
+  # tidy the corpus
+  dict <- tidy(corpus) %>% select(text)  
+  
 
-busi_biletter <- busi_corpus %>% biletter_list() %>% into_dataframe() # 600770 3
-politics_biletter <- politics_corpus %>% biletter_list() %>% into_dataframe() #628390 3
-entertain_biletter <- entertain_corpus %>% biletter_list() %>% into_dataframe() #431247 3
-tech_biletter <- tech_corpus %>% biletter_list() %>% into_dataframe() # 673618 3
-sport_biletter <- sport_corpus %>% biletter_list() %>% into_dataframe() # 529903 3
+  completed <- dict %>%
+    unnest_tokens(dictionary, text) %>%
+    anti_join(stop_words,by = c("dictionary" = "word"))  # remove stop words
+  
+  # return the dictionary
+  list <- completed$dictionary %>% paste(., collapse = " ")
+  return(list)
+}
 ```
 
-```{r biletter csv}
+```{r biletter}
+## a function to get the character bigram from a token
+biletter <- function(token){
+  # Split into characterss:
+  w <- strsplit(token, "")[[1]]
+  # character bigrams pasted together:
+  return(vapply(ngrams(w, 2L), paste, "", collapse = ""))
+}
 
-#write.csv(busi_biletter, file = "../output/busi_biletter.csv", row.names = F)
-#write.csv(politics_biletter, file = "../output/politics_biletter.csv",row.names = F)
-#write.csv(entertain_biletter, file = "../output/entertain_biletter.csv",row.names = F)
-#write.csv(tech_biletter, file = "../output/tech_biletter.csv",row.names = F)
-#write.csv(sport_biletter, file = "../output/sport_biletter.csv",row.names = F)
-
-```
-
-```{r}
-# Business
-busi_df <- busi_biletter[,1:2] %>% 
-  table()  %>% tbl_df() %>%
-  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) 
-
-busi_density <- unite(busi_df, letters, c(X1, X2), remove=T, sep = "") 
-busi_density$freq <- (busi_density$n+1)/sum(busi_density$n)
-all_letters <- busi_density[,1]
-
-
-busi_df %>%
-  ggplot(., aes(x=X1, y=X2, fill=n)) +
-  geom_tile() + theme_bw() + coord_equal() +
-  scale_fill_distiller(palette="Greens", direction=1) +
-  labs(x = "The First Letter", y = "The Second Letter", title = "Bi-letter from Business News")
-```
-```{r}
-# Politics
-politics_df <- politics_biletter[,1:2] %>% 
-  table()  %>% tbl_df() %>%
-  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) 
-
-politics_density <- unite(politics_df, letters, c(X1, X2), remove=T, sep = "") 
-politics_density$freq <- (politics_density$n+1)/sum(politics_density$n)
-
-
-politics_df%>%
-  ggplot(., aes(x=X1, y=X2, fill=n)) +
-  geom_tile() + theme_bw() + coord_equal() +
-  scale_fill_distiller(palette="Greens", direction=1) +
-  labs(x = "The First Letter", y = "The Second Letter", title = "Bi-letter from Politics News")
-```
-
-
-```{r}
-# Entertainment
-entertain_df <- entertain_biletter[,1:2] %>% 
-  table()  %>% tbl_df() %>%
-  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) 
-
-entertain_density <- unite(entertain_df, letters, c(X1, X2), remove=T, sep = "") 
-entertain_density$freq <- (entertain_density$n+1)/sum(entertain_density$n)
-
-entertain_df %>%
-  ggplot(., aes(x=X1, y=X2, fill=n)) +
-  geom_tile() + theme_bw() + coord_equal() +
-  scale_fill_distiller(palette="Greens", direction=1) +
-  labs(x = "The First Letter", y = "The Second Letter", title = "Bi-letter from Entertainment News")
-```
-```{r}
-# Sport
-sport_df <- sport_biletter[,1:2] %>% 
-  table()  %>% tbl_df() %>%
-  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) 
-
-sport_density <- unite(sport_df, letters, c(X1, X2), remove=T, sep = "") 
-sport_density$freq <- (sport_density$n+1)/sum(sport_density$n)
-
-
-sport_df %>%
-  ggplot(., aes(x=X1, y=X2, fill=n)) +
-  geom_tile() + theme_bw() + coord_equal() +
-  scale_fill_distiller(palette="Greens", direction=1) +
-  labs(x = "The First Letter", y = "The Second Letter", title = "Bi-letter from Sport News")
+## a function to apply the biletter function in a corpus
+biletter_list <- function(corpus){
+  letter <- list()
+  for(i in 1:length(corpus)){
+    letter[[i]]<- corpus[i] %>% as.character() %>% biletter()
+  }
+  letter <- unlist(letter)
+  return(letter)
+}
 ```
 
 ```{r}
-# Technology
-tech_df <- tech_biletter[,1:2] %>% 
-  table()  %>% tbl_df() %>%
-  mutate(X1 = factor(X1), X2 = factor(X2, levels = rev(unique(X2)))) 
+## a function to extract the density of character bigram 
+density <- function(reference){
+  trans.mat=matrix(0,27,27)
+  rownames(trans.mat)=colnames(trans.mat)=c(tolower(letters),"")
+  lastletter=""
+  
+  for (ln in 1:length(reference)) {
+    if (ln %% 1000 ==0) {cat("Line",ln,"\n")}
+    for (pos in 1:nchar(reference[ln])) {
+      curletter=substring(reference[ln],pos,pos)
+      
+      if (curletter %in% tolower(letters)) {
+        trans.mat[rownames(trans.mat)==lastletter,
+                  colnames(trans.mat)==curletter]=
+          trans.mat[rownames(trans.mat)==lastletter,
+                    colnames(trans.mat)==curletter]+1
+        lastletter=curletter
+      } else {
+        
+        if (lastletter!="") {
+          trans.mat[rownames(trans.mat)==lastletter,27]=
+            trans.mat[rownames(trans.mat)==lastletter,27]+1
+          lastletter=""
+        }
+      }
+    }
+    curletter=""
+    
+    if (lastletter!="") {
+      trans.mat[rownames(trans.mat)==lastletter,27]=
+        trans.mat[rownames(trans.mat)==lastletter,27]+1
+    }
+    lastletter=""
+  }
+  
+  trans.prob.mat <- (trans.mat+1) / sum(trans.mat)
+  all_letters <- expand.grid(colnames(trans.prob.mat),rownames(trans.prob.mat)) %>%
+    unite(., letters, c(Var1, Var2), remove=T, sep = "") %>% as.matrix() %>% as.vector()
+  freq <- as.vector(trans.prob.mat)
+  names(freq) <- all_letters
+  return(freq)
+}
+```
 
-tech_density <- unite(tech_df, letters, c(X1, X2), remove=T, sep = "") 
-tech_density$freq <- (tech_density$n+1)/sum(tech_density$n)
-
-tech_df %>%
-  ggplot(., aes(x=X1, y=X2, fill=n)) +
-  geom_tile() + theme_bw() + coord_equal() +
-  scale_fill_distiller(palette="Greens", direction=1) +
-  labs(x = "The First Letter", y = "The Second Letter", title = "Bi-letter from Technology News")
+```{r}
+## a function to obtain the density in a list of files
+extract.features <- function(bigr_lib,k = NA){
+  features <- matrix(NA, nrow = length(bigr_lib), ncol = 729)
+  for(i in 1:length(bigr_lib)){
+    features[i,] <- bigr_lib[[i]] %>% dictionary() %>% density()
+    colnames(features) <- names(b)
+  }
+  labels <- rep(k, length(bigr_lib))
+  return(list(features = features, labels = labels))
+}
 ```
 
 
-### Step 2: SVM 
-```{r features}
+```{r feature extraction}
 
+## extract the features in each topic
 busi_feat <- busi_bigr_lib %>% lapply(., dictionary)  %>% extract.features(.,k = "business")
 sport_feat <- sport_bigr_lib %>% lapply(., dictionary) %>%extract.features(.,k = "sport")
 entertain_feat <- entertain_bigr_lib %>% lapply(., dictionary) %>% extract.features(.,k = "entertainment")
@@ -173,304 +174,223 @@ tech_feat <- tech_bigr_lib %>% lapply(., dictionary) %>%extract.features(.,k = "
 
 ```
 
-```{r train set}
-# 70% data as train set
+```{r training ind}
+## a function to get the training index
+train.ind <- function(bigr_lib){
+  ind <- sample(1:length(bigr_lib), floor(length(bigr_lib)*0.7), replace = F)
+  return(ind)
+}
+```
+
+```{r training set}
+## 70% data as train set
 set.seed(0)
-busi_ind <- train.ind(busi_bigr_lib)
-politics_ind <- train.ind(politics_bigr_lib)
-entertain_ind <- train.ind(entertain_bigr_lib)
-sport_ind <- train.ind(sport_bigr_lib)
-tech_ind <- train.ind(tech_bigr_lib)
+busi_ind <- train.ind(busi_bigr_lib) # 357 files
+politics_ind <- train.ind(politics_bigr_lib) # 291 files
+entertain_ind <- train.ind(entertain_bigr_lib) # 270 files
+sport_ind <- train.ind(sport_bigr_lib) # 357 files
+tech_ind <- train.ind(tech_bigr_lib) # 280 files
 
-
-ind <- list(busi_ind, politics_ind, entertain_ind, sport_ind, tech_ind)
-# save(ind, file = "../output/train_index.RData")
-
-train_feat <- list(features = rbind(busi_feat$features[busi_ind,],
-                      politics_feat$features[politics_ind,],
-                      entertain_feat$features[entertain_ind,],
-                      sport_feat$features[sport_ind,],
-                      tech_feat$features[tech_ind,]), 
+## the feactures in each file in training set or test set
+train_feat <- list(features = rbind(busi_feat$features[busi_ind,],#421086 character bigrams
+                      politics_feat$features[politics_ind,], #438395 character bigrams
+                      entertain_feat$features[entertain_ind,],  #299454 character bigrams
+                      sport_feat$features[sport_ind,], #367672 character bigrams
+                      tech_feat$features[tech_ind,]),  #470678 character bigrams
                    labels = c(busi_feat$labels[busi_ind], 
                               politics_feat$labels[politics_ind],
                               entertain_feat$labels[entertain_ind],
                               sport_feat$labels[sport_ind],
                               tech_feat$labels[tech_ind]))
 
-test_feat <- list(features = rbind(busi_feat$features[-busi_ind,],
-                      politics_feat$features[-politics_ind,],
-                      entertain_feat$features[-entertain_ind,],
-                      sport_feat$features[-sport_ind,],
-                      tech_feat$features[-tech_ind,]), 
+test_feat <- list(features = rbind(busi_feat$features[-busi_ind,], #179682 character bigrams
+                      politics_feat$features[-politics_ind,], #189993 character bigrams
+                      entertain_feat$features[-entertain_ind,], #131791 character bigrams
+                      sport_feat$features[-sport_ind,], #162229 character bigrams 
+                      tech_feat$features[-tech_ind,]),  #202938 character bigrams
                    labels = c(busi_feat$labels[-busi_ind], 
                               politics_feat$labels[-politics_ind],
                               entertain_feat$labels[-entertain_ind],
                               sport_feat$labels[-sport_ind],
                               tech_feat$labels[-tech_ind]))
 
-# save(train_feat, file = "../output/train_feat.RData")
-# save(test_feat, file = "../output/test_feat.RData")
-# load("../output/train_feat.RData")
-# load("../output/test_feat.RData")
-```
 
-```{r message=FALSE}
-
-fit_svm <- ksvm(train_feat$features, as.factor(train_feat$labels), type = "C-svc")
-svm_test_pred <- predict(fit_svm, test_feat$features)
-svm_test_error <- sum(svm_test_pred != as.factor(test_feat$labels))/length(test_feat$labels)
-cat("SVM train error:",fit_svm@error, "\n","SVM test error:", svm_test_error)
-
-```
-
-### Step 3: KLD
-```{r}
+## combine the training set as one document and obtain the density
 busi_train <- list.files(busi_location)[busi_ind] %>% 
   lapply(., read_txt,busi_location) %>% 
   dictionary() %>% toString() %>% density()
-# save(busi_train, file = "../output/busi_train.RData")
 
 sport_train <- list.files(sport_location)[sport_ind] %>%
   lapply(., read_txt,sport_location) %>% 
   dictionary() %>% toString() %>% density()
-# save(sport_train, file = "../output/sport_train.RData")
 
 politics_train <- list.files(politics_location)[politics_ind] %>% 
   lapply(., read_txt,politics_location) %>% dictionary() %>%
   toString() %>% density()
-# save(politics_train, file = "../output/politics_train.RData")
-
 
 entertain_train <- list.files(entertain_location)[entertain_ind] %>% 
   lapply(., read_txt,entertain_location) %>% dictionary() %>%
   toString() %>% density()
-# save(entertain_train, file = "../output/entertain_train.RData")
 
 tech_train <- list.files(tech_location)[tech_ind] %>% 
   lapply(., read_txt,tech_location) %>% dictionary() %>%
   toString() %>% density()
-# save(tech_train, file = "../output/tech_train.RData")
+```
+
+number of training tokens
+```{r number of training tokens}
+# business tokens
+list.files(busi_location)[busi_ind] %>% 
+  lapply(., read_txt,busi_location) %>% 
+  dictionary() %>% biletter_list() %>% length()
+# sport tokens
+ list.files(sport_location)[sport_ind] %>%
+  lapply(., read_txt,sport_location) %>% 
+  dictionary() %>% biletter_list() %>% length()
+# politics tokens
+list.files(politics_location)[politics_ind] %>% 
+  lapply(., read_txt,politics_location) %>% dictionary() %>%
+  biletter_list() %>% length()
+# entertainment tokens
+list.files(entertain_location)[-entertain_ind] %>% 
+  lapply(., read_txt,entertain_location) %>% dictionary() %>%
+  biletter_list() %>% length()
+# technology tokens
+list.files(tech_location)[tech_ind] %>% 
+  lapply(., read_txt,tech_location) %>% dictionary() %>%
+  biletter_list() %>% length()
+```
+number of test tokens
+```{r number of test tokens}
+# business tokens
+list.files(busi_location)[-busi_ind] %>% 
+  lapply(., read_txt,busi_location) %>% 
+  dictionary() %>% biletter_list() %>% length()
+# sport tokens
+ list.files(sport_location)[-sport_ind] %>%
+  lapply(., read_txt,sport_location) %>% 
+  dictionary() %>% biletter_list() %>% length()
+# politics tokens
+list.files(politics_location)[-politics_ind] %>% 
+  lapply(., read_txt,politics_location) %>% dictionary() %>%
+  biletter_list() %>% length()
+# entertainment tokens
+list.files(entertain_location)[-entertain_ind] %>% 
+  lapply(., read_txt,entertain_location) %>% dictionary() %>%
+  biletter_list() %>% length()
+# technology tokens
+list.files(tech_location)[-tech_ind] %>% 
+  lapply(., read_txt,tech_location) %>% dictionary() %>%
+  biletter_list() %>% length()
+```
+
+### Step 3: KLD
+```{r}
+## a function to obtain the prediction using KLD distance
+KLD.label <- function(file){
+  
+  # KLD distance between file and business files
+  kld_busi <- KLD(busi_train,file)$sum.KLD.px.py/KLD(busi_train,rep(0,729))$sum.KLD.px.py
+  
+  # KLD distance between file and politics files
+  kld_politics <- KLD(politics_train,file)$sum.KLD.px.py/KLD(politics_train,rep(0,729))$sum.KLD.px.py
+  
+  # KLD distance between file and entertainment files
+  kld_entertain <- KLD(entertain_train,file)$sum.KLD.px.py/KLD(entertain_train,rep(0,729))$sum.KLD.px.py
+  
+  # KLD distance between file and sport files
+  kld_sport <- KLD(sport_train,file)$sum.KLD.px.py/KLD(sport_train,rep(0,729))$sum.KLD.px.py
+  
+  # KLD distance between file and technology files
+  kld_tech <- KLD(tech_train,file)$sum.KLD.px.py/KLD(tech_train,rep(0,729))$sum.KLD.px.py
+  
+  # predict the label with lowest KLD distance
+  kld.dist <- cbind(kld_busi, kld_politics, kld_entertain, kld_sport, kld_tech)
+  labels <- c("business", "politics", "entertainment","sport","technology")
+  
+  ind <- which.min(kld.dist)
+  return(labels[ind])
+}
 
 ```
 
-```{r}
-#load("../output/busi_train.RData")
-#load("../output/sport_train.RData")
-#load("../output/politics_train.RData")
-#load("../output/entertain_train.RData")
-#load("../output/tech_train.RData")
-```
+```{r training set KLD}
 
-```{r}
-
+## classify training set with KLD distance
 kld_train_pred <- rep(NA, nrow(train_feat$features))
 for(i in 1:length(train_feat$labels)){
   kld_train_pred[i] <-   KLD.label(train_feat$features[i,])
 }
 
-table(kld_train_pred, train_feat$labels)
-
-```
-
-```{r}
+## training error
 kld_train_err <- sum(kld_train_pred != train_feat$labels)/length(train_feat$labels)
-cat("KLD train error:", kld_train_err)
+cat("KLD training error:", kld_train_err)
+
 ```
 
-```{r}
+```{r test set KLD}
+
+## classify test set with KLD distance
 kld_test_pred <- rep(NA, nrow(test_feat$features))
 for(i in 1:length(test_feat$labels)){
   kld_test_pred[i] <-   KLD.label(test_feat$features[i,])
 }
-table(kld_test_pred, test_feat$labels)
-```
 
-```{r}
+## test error
 kld_test_err <- sum(kld_test_pred != test_feat$labels)/length(test_feat$labels)
 cat("KLD test error:", kld_test_err)
-```
-
-### Step 3: New file
-*SVM prediction*
-```{r}
-athletics_location <- "../data/bbcsports/athletics/"
-athletics_feat <- athletics_location %>% list.files() %>% 
-  lapply(., read_txt,athletics_location) %>% 
-  lapply(.,dictionary) %>% extract.features(.,k=NA)
-athletics_pred <- predict(fit_svm, athletics_feat$features)
-
-cricket_location <- "../data/bbcsports/cricket/"
-cricket_feat <- cricket_location %>% list.files() %>% 
-  lapply(., read_txt,cricket_location) %>% 
-  lapply(.,dictionary) %>% extract.features(.,k=NA)
-cricket_pred <- predict(fit_svm, cricket_feat$features)
-
-football_location <- "../data/bbcsports/football/"
-football_feat <- football_location %>% list.files() %>% 
-  lapply(., read_txt,football_location) %>% 
-  lapply(.,dictionary) %>% extract.features(.,k=NA)
-football_pred <- predict(fit_svm, football_feat$features) 
-
-rugby_location <- "../data/bbcsports/rugby/"
-rugby_feat <- rugby_location %>% list.files() %>% 
-  lapply(., read_txt,rugby_location) %>% 
-  lapply(.,dictionary)%>% extract.features(.,k=NA)
-rugby_pred <- predict(fit_svm, rugby_feat$features)
-
-
-tennis_location <- "../data/bbcsports/tennis/"
-tennis_feat <- tennis_location %>% list.files() %>% 
-  lapply(., read_txt,tennis_location) %>% 
-  lapply(.,dictionary) %>% extract.features(.,k=NA)
-tennis_pred <- predict(fit_svm, tennis_feat$features)
-```
-
-```{r}
-
-svm_results <- rbind(table(athletics_pred),table(cricket_pred), table(football_pred),table(rugby_pred),table(tennis_pred))
-rownames(svm_results) <- c("athletics", "cricket", "football", "rugby","tennis")
-svm_results
 
 ```
 
-```{r}
-svm_pred_err <- 1-apply(svm_results, 2, sum)/sum(svm_results)
-cat("SVM predict error:",svm_pred_err[4])
+### Step 4: SVM
+```{r SVM}
+set.seed(2)
+
+## fit the model
+fit_svm <- ksvm(train_feat$features, as.factor(train_feat$labels), type = "C-svc")
+
+## predict in test set
+svm_test_pred <- predict(fit_svm, test_feat$features)
+
+## results
+svm_test_error <- sum(svm_test_pred != as.factor(test_feat$labels))/length(test_feat$labels)
+cat("SVM training error:",fit_svm@error, "\n","SVM test error:", svm_test_error)
+
 ```
 
-*KLD prediction*
-```{r}
-athletics_kld_pred <- athletics_feat %>% KLD.pred() %>% as.factor()
-cricket_kld_pred <- cricket_feat %>% KLD.pred()
-football_kld_pred <- football_feat %>% KLD.pred()
-rugby_kld_pred <- rugby_feat %>%  KLD.pred()
-tennis_kld_pred <- tennis_feat %>% KLD.pred()
-```
+### Step 5: Test with a new topic
 
 ```{r}
+## using just politics, entertainment, sport and tech as known topics
+## treating business as the unknown topic that we need to add
 
-kld_err <- sum(sum(athletics_kld_pred != "sport"),  sum(cricket_kld_pred != "sport"), sum(football_kld_pred != "sport"), sum(rugby_kld_pred != "sport"), sum(tennis_kld_pred != "sport"))/sum(length(atheletics_pred),length(cricket_kld_pred), length(football_kld_pred), length(rugby_kld_pred), length(tennis_kld_pred))
-cat("KLD error:", kld_err)
+## a function to classify with a new topic
+KLD.label.new <- function(file){
   
-```
+  kld_busi <- KLD(dic,file)$sum.KLD.px.py/KLD(dic,rep(0,729))$sum.KLD.px.py
+  kld_politics <- KLD(politics_train,file)$sum.KLD.px.py/KLD(politics_train,rep(0,729))$sum.KLD.px.py
+  kld_entertain <- KLD(entertain_train,file)$sum.KLD.px.py/KLD(entertain_train,rep(0,729))$sum.KLD.px.py
+  kld_sport <- KLD(sport_train,file)$sum.KLD.px.py/KLD(sport_train,rep(0,729))$sum.KLD.px.py
+  kld_tech <- KLD(tech_train,file)$sum.KLD.px.py/KLD(tech_train,rep(0,729))$sum.KLD.px.py
 
-
-### Step 4: Comparing results
-```{r}
-
-performance_table <- data.frame("Value" = rep(NA,4))
-row.names(performance_table) <- c("SVM training error", "SVM test error", "KLD training error", "KLD test error")
-performance_table[1,1] <- fit_svm@error
-performance_table[2,1] <- svm_test_error
-performance_table[3,1] <- kld_train_err
-performance_table[4,1] <- kld_test_err 
-
-kable(performance_table, caption = "Summary of Nonparametric Text Classification Performance")
+  kld.dist <- cbind(kld_busi, kld_politics, kld_entertain, kld_sport, kld_tech)
+  labels <- c("business", "politics", "entertainment","sport","technology")
+  
+  ind <- which.min(kld.dist)
+  return(labels[ind])
+}
 
 ```
 
 ```{r}
-# total files in each topic
-busi_nums <- busi_location %>% list.files() %>% length() 
-politics_nums <- politics_location %>% list.files() %>% length()
-entertain_nums <- entertain_location %>% list.files() %>% length()
-sport_nums <- sport_location %>% list.files() %>% length()
-tech_nums <- tech_location %>% list.files() %>% length()
-total_nums <- busi_nums + politics_nums + entertain_nums + sport_nums + tech_nums
-nums <- cbind(total_nums, busi_nums, politics_nums, entertain_nums, sport_nums, tech_nums)
-
-## training files in each topic
-a1 <- busi_ind %>% length()
-a2 <- politics_ind %>% length()
-a3 <- entertain_ind %>% length()
-a4 <- sport_ind %>% length()
-a5 <- tech_ind %>% length()
-a6 <- a1 + a2 +a3 + a4 + a5
-a7 <- cbind(a6,a1,a2,a3,a4,a5)
-
-
-## test files in each topic
-b1 <- total_nums - a6
-b2 <- busi_nums - a1
-b3 <- politics_nums - a2
-b4 <- entertain_nums - a3
-b5 <- sport_nums - a4
-b6 <- tech_nums - a5
-b7 <- cbind(b1,b2,b3,b4,b5,b6)
-
-
-## SVM training error
-
-c6 <- (3+4+3+1+1)/a6
-c1 <- 3/a1
-c2 <- 4/a3
-c3 <- 3/a2
-c4 <- 1/a4
-c5 <- 1/a5
-c7 <- cbind(c6,c1,c2,c3,c4,c5)
-
-
-## SVM test error
-
-d1 <- (5+6+2+5+1+11+3+2+1+1+6+3+1+1)/b1
-d2 <- 5/b2
-d3 <- 1-102/b4
-d4 <- 1-109/b3
-d5 <- 1-153/b5
-d6 <- 1-110/b6
-d7 <- cbind(d1,d2,d3,d4,d5,d6)
-
-
-## KLD training error
-e1 <- 1-345/a1
-e2 <- 1-229/a2
-e3 <- 1-233/a3
-e4 <- 1-319/a4
-e5 <- 1-252/a5
-e6 <- (9+3+17+8+12+40+4+7+11+23+10+3+2+20+4+2+2)/a6
-e7 <- cbind(e6,e1,e2,e3,e4,e5)
-
-
-## KLD test error
-
-f1 <- (2+2+3+5+4+8+14+3+3+4+12+2+9+5+2+5)/b1
-f2 <- 1 -146/b2
-f3 <- 1-102/b3
-f4 <- 1-99/b4
-f5 <- 1-102/b5
-f6 <- 1-100/b6
-f7 <- cbind(f1,f2,f3,f4,f5,f6)
-
-```
-```{r}
-topic_result <- data.frame(total = rep(NA,7), business = rep(NA,7), politics = rep(NA,7),
-                           entertainment = rep(NA,7), sport = rep(NA,7), technology = rep(NA,7))
-topic_result[1,] <- nums %>% as.character()
-topic_result[2,] <- a7 
-topic_result[3,] <- b7
-topic_result[4,] <- round(c7,4) 
-topic_result[5,] <- round(d7,4)
-topic_result[6,] <- round(e7,4)
-topic_result[7,] <- round(f7,4)
-
-
-row.names(topic_result) <- c("nums of files","nums of training files","nums of test files",
-                            "SVM training errors","SVM test errors", 
-                            "KLD training errors", "KLD test errors")
-
-
-topic_result
-```
-
-### Step 4: Try to add new topics
-```{r}
+## using just one file in business topic to generate a topic density
 file <- readLines("../data/bbc/business/001.txt") %>% strsplit(., split = " ") %>% unlist()
 L <- length(file)
-S <- 500
+S <- 100
 boots <- list()
 
 for(s in 1:S){
-  indices <- sample(1:L, L*3, replace = T)
+  indices <- sample(1:L, L, replace = T)
   boots[[s]] <- file[indices]
 }
 
@@ -479,6 +399,7 @@ dic <- boots %>% density()
 ```
 
 ```{r}
+## comparing results with using all the documents previously
 busi_test <- list(features =busi_feat$features[-busi_ind,], labels = busi_feat$labels[-busi_ind])
 kld_busi_pre <- rep(NA, nrow(busi_test$features))
 for(i in 1:length(busi_test$labels)){
@@ -494,13 +415,60 @@ kld_err_pre <- sum(kld_busi_pre != busi_test$labels)/length(busi_test$labels)
 kld_err_new <- sum(kld_busi_new != busi_test$labels)/length(busi_test$labels)
 cat("KLD error (previous):", kld_err_pre, "\n", "KLD error (new):", kld_err_new)
 ```
+
+
+### Step 6: Comparing results
+*KLD accuracy*
 ```{r}
-file1 <- busi_test$features[3,]
-KLD(dic,file1)$sum.KLD.px.py/KLD(dic,rep(0,729))$sum.KLD.px.py
-KLD(busi_train,file1)$sum.KLD.px.py/KLD(busi_train,rep(0,729))$sum.KLD.px.py
-KLD(politics_train,file1)$sum.KLD.px.py/KLD(politics_train,rep(0,729))$sum.KLD.px.py
-KLD(entertain_train,file1)$sum.KLD.px.py/KLD(entertain_train,rep(0,729))$sum.KLD.px.py
-KLD(sport_train,file1)$sum.KLD.px.py/KLD(sport_train,rep(0,729))$sum.KLD.px.py
-KLD(tech_train,file1)$sum.KLD.px.py/KLD(tech_train,rep(0,729))$sum.KLD.px.py
+table(kld_train_pred, train_feat$labels)
 ```
+```{r}
+table(kld_test_pred, test_feat$labels)
+```
+
+```{r}
+KLD_table <- data.frame("Training_Accuracy" = rep(NA,5), "Test_Accuracy" = rep(NA,5))
+row.names(KLD_table) <- c("Business", "Entertainment", "Politics", "Sport","Technology")
+KLD_table[1,1] <- 349/357;KLD_table[1,2] <- 146/153
+KLD_table[2,1] <- 232/270;KLD_table[2,2] <- 99/116
+KLD_table[3,1] <- 232/291;KLD_table[3,2] <- 100/126
+KLD_table[4,1] <- 320/357;KLD_table[4,2] <- 140/154
+KLD_table[5,1] <- 250/280;KLD_table[5,2] <- 100/121
+kable(KLD_table, caption = "Summary of KLD Classification Performance")
+```
+
+
+*SVM accuracy*
+```{r}
+table(fit_svm@fitted, train_feat$labels)
+```
+```{r}
+table(svm_test_pred, test_feat$labels)
+```
+
+```{r}
+SVM_table <- data.frame("Training_Accuracy" = rep(NA,5), "Test_Accuracy" = rep(NA,5))
+row.names(SVM_table) <- c("Business", "Entertainment", "Politics", "Sport","Technology")
+SVM_table[1,1] <- 354/357;SVM_table[1,2] <- 148/153
+SVM_table[2,1] <- 267/270;SVM_table[2,2] <- 101/116
+SVM_table[3,1] <- 287/291;SVM_table[3,2] <- 110/126
+SVM_table[4,1] <- 356/357;SVM_table[4,2] <- 153/154
+SVM_table[5,1] <- 247/280;SVM_table[5,2] <- 110/121
+kable(SVM_table, caption = "Summary of SVM Classification Performance")
+```
+
+*All accuracy*
+```{r all results}
+
+performance_table <- data.frame("Value" = rep(NA,4))
+row.names(performance_table) <- c("SVM training error", "SVM test error", "KLD training error", "KLD test error")
+performance_table[1,1] <- fit_svm@error
+performance_table[2,1] <- svm_test_error
+performance_table[3,1] <- kld_train_err
+performance_table[4,1] <- kld_test_err 
+
+kable(performance_table, caption = "Summary of Nonparametric Text Classification Performance")
+
+```
+
 
